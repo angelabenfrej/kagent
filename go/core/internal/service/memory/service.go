@@ -8,6 +8,7 @@ import (
 
 	"github.com/pgvector/pgvector-go"
 
+	"github.com/kagent-dev/kagent/go/api/definition"
 	"github.com/kagent-dev/kagent/go/core/internal/database"
 	"github.com/kagent-dev/kagent/go/core/internal/runtimeauth"
 	"github.com/kagent-dev/kagent/go/core/internal/service/serviceerrors"
@@ -229,10 +230,11 @@ func (s *Service) scope(ctx context.Context, verb auth.Verb) (string, string, er
 	if err != nil {
 		return "", "", err
 	}
-	if session.GetAgent().GetNamespace() == "" || session.GetAgent().GetName() == "" || session.Creator == "" {
+	source := definition.FromSession(session)
+	if source.Namespace == "" || source.Name == "" || session.Creator == "" {
 		return "", "", serviceerrors.NewPermissionDenied("actor has no memory scope", nil)
 	}
-	agentName := session.Agent.Namespace + "/" + session.Agent.Name
+	agentName := source.MemoryKey()
 	return agentName, session.Creator, s.authorize(ctx, verb, agentName)
 }
 

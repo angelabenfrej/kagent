@@ -77,7 +77,7 @@ export function AgentsTab() {
   const conversationCounts = useMemo(() => {
     const counts = new Map<string, number>();
     for (const instance of conversations.data ?? []) {
-      if (instance.agent) counts.set(instance.agent, (counts.get(instance.agent) ?? 0) + 1);
+      if (instance.agent && instance.source?.kind !== "ScheduledRun") counts.set(instance.agent, (counts.get(instance.agent) ?? 0) + 1);
     }
     return counts;
   }, [conversations.data]);
@@ -94,6 +94,7 @@ export function AgentsTab() {
     const known = new Set(agents.map((agent) => agent.ref));
     const unreadable = new Set(definitions.data.refused.map((entry) => entry.namespace));
     return conversations.data.filter((instance) => {
+      if (instance.source?.kind === "ScheduledRun") return false;
       const namespace = instance.agent?.split("/")[0];
       if (namespace && (!readNamespaces.includes(namespace) || unreadable.has(namespace))) return false;
       return !instance.agent || !known.has(instance.agent);

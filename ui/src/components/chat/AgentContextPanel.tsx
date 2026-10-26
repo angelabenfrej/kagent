@@ -1,3 +1,4 @@
+import { instanceSourceUrl } from "@/components/agent/agentUrl";
 import { Alert, Skeleton, Space, Tag, Typography } from "antd";
 import { useTheme } from "@emotion/react";
 import { Link } from "react-router-dom";
@@ -30,7 +31,20 @@ const { Text, Paragraph } = Typography;
  * the conversation holds so the two can be told apart, rather than quietly implying
  * they are the same thing.
  */
-export function AgentContextPanel({
+export function AgentContextPanel(props: { instance?: AgentInstance; agentRef?: { namespace: string; name?: string } }) {
+  const source = props.instance?.source;
+  if (source?.kind === "ScheduledRun") {
+    return <Space orientation="vertical" data-testid="chat-agent-context">
+      <Field label="ScheduledRun">
+        <Link to={instanceSourceUrl(props.instance)!}>{source.namespace}/{source.name}</Link>
+      </Field>
+      <Field label="Runtime revision"><Text code>{props.instance?.preparedRevision ?? "Not reported"}</Text></Field>
+    </Space>;
+  }
+  return <AgentResourceContextPanel {...props} />;
+}
+
+function AgentResourceContextPanel({
   instance,
   agentRef,
 }: {

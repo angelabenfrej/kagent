@@ -64,7 +64,7 @@ import {
   railItemIsActive,
   type RailItem,
 } from "./railItems";
-import { agentPageUrl, agentUrl, type AgentInstanceRef } from "./agentUrl";
+import { agentPageUrl, instanceSourceUrl, agentUrl, type AgentInstanceRef } from "./agentUrl";
 import { AgentSwitcher } from "./AgentSwitcher";
 import {
   checkboxStyles,
@@ -207,8 +207,10 @@ export function AgentRail({
   const conversations = instances;
   // A conversation route has only its instance ID. Resolve its Agent from the
   // already-loaded list while the per-instance read catches up during a switch.
-  const currentAgentName =
-    conversations.data?.find((item) => item.id === ref.id)?.agent ?? instance?.agent;
+  const currentInstance = conversations.data?.find((item) => item.id === ref.id) ?? instance;
+  const currentAgentName = currentInstance?.agent;
+  const source = currentInstance?.source;
+  const sourceKind = source?.kind ?? "Agent";
 
   /**
    * Which agent the switcher is open *for*, rather than whether it is open.
@@ -260,6 +262,7 @@ export function AgentRail({
    */
   const agentPageHref =
     agentHrefFromCaller ??
+    (source?.kind === "ScheduledRun" ? instanceSourceUrl(currentInstance) : undefined) ??
     (currentAgentName
       ? agentPageUrl({
         namespace: currentAgentName.split("/")[0],
@@ -312,7 +315,7 @@ export function AgentRail({
    * Built from `agentPageHref`, never `agentHref`: a redirected details link addresses
    * the conversation, and `/new` under it is a route nothing serves.
    */
-  const newChatHref = agentPageHref ? `${agentPageHref}/new` : undefined;
+  const newChatHref = sourceKind === "Agent" && agentPageHref ? `${agentPageHref}/new` : undefined;
 
   /*
    * The rail's navigation, as data an extension can reach.
@@ -346,7 +349,7 @@ export function AgentRail({
     const siblings = currentAgentName
       ? (conversations.data ?? []).filter(
           (candidate) =>
-            candidate.agent === currentAgentName,
+            candidate.agent === currentAgentName && (candidate.source?.kind ?? "Agent") === sourceKind,
         )
       : (conversations.data ?? []);
     const needle = query.trim().toLowerCase();
@@ -361,7 +364,7 @@ export function AgentRail({
             candidate.name.toLowerCase().includes(needle),
         );
     return [...found].sort(byNewestFirst);
-  }, [conversations.data, currentAgentName, query]);
+  }, [conversations.data, currentAgentName, sourceKind, query]);
 
   /*
    * Collapsed, and remembered.

@@ -37,6 +37,7 @@ import (
 
 	"github.com/kagent-dev/kagent/go/adk/pkg/controllerclient"
 	runtimetaskstore "github.com/kagent-dev/kagent/go/adk/pkg/taskstore"
+	"github.com/kagent-dev/kagent/go/api/definition"
 	apiv1 "github.com/kagent-dev/kagent/go/api/gen/kagent/api/v1"
 	runtimev1 "github.com/kagent-dev/kagent/go/api/gen/kagent/runtime/v1"
 	"github.com/kagent-dev/kagent/go/core/internal/a2agateway"
@@ -191,7 +192,7 @@ func TestRuntimeTaskStoreThroughGRPC(t *testing.T) {
 	require.Equal(t, codes.PermissionDenied, status.Code(err))
 	_, err = controller.MemoryService().List(authenticated, &runtimev1.MemoryServiceListRequest{AgentName: "forged/agent"})
 	require.NoError(t, err)
-	require.Equal(t, session.Agent.Namespace+"/"+session.Agent.Name, memories.agentName)
+	require.Equal(t, session.GetAgent().Ref.Namespace+"/"+session.GetAgent().Ref.Name, memories.agentName)
 	require.Equal(t, session.Creator, memories.userID)
 	_, err = private.GetTask(authenticated, &runtimev1.TaskStoreServiceGetTaskRequest{SessionId: uuid.NewString(), TaskId: "absent"})
 	require.Equal(t, codes.PermissionDenied, status.Code(err))
@@ -692,22 +693,16 @@ func TestRuntimeTaskStoreThroughGRPC(t *testing.T) {
 // pins, authority and actor identity invariants as a real runtime session.
 func createTaskStoreSession(t *testing.T, store *database.Client) *apiv1.Session {
 	t.Helper()
-	revision := database.RuntimeRevision{
-		Revision: "revision-1", Namespace: "team-a", AgentName: "assistant", AgentUID: "template-uid",
+	revision := database.RuntimeRevision{Source: definition.Source{Kind: definition.Agent, Namespace: "team-a", Name: "assistant", UID: "template-uid"}, Revision: "revision-1",
 		SourceSnapshot: []byte("{}"),
 		AgentCard:      &a2apb.AgentCard{Name: "assistant"}, EgressDestinations: []string{},
 		ActorTemplateAtespace: "team-a", ActorTemplateName: "assistant-kagent-revision", ActorTemplateUID: "actor-template-uid",
 	}
-	upsertErr := store.UpsertAgentDefinition(t.Context(), database.AgentDefinition{
-		Namespace: revision.Namespace, AgentName: revision.AgentName, AgentUID: revision.AgentUID,
-		DesiredRevision: revision.Revision,
-	})
+	upsertErr := store.UpsertAgentDefinition(t.Context(), database.AgentDefinition{Source: definition.Source{Kind: definition.Agent, Namespace: revision.Namespace, Name: revision.Name, UID: revision.UID}, DesiredRevision: revision.Revision})
 	require.NoError(t, upsertErr)
 	require.NoError(t, store.RecordRuntimeRevision(t.Context(), revision, database.RecordRevisionOptions{Ready: true}))
 	session, _, err := store.CreateSession(t.Context(), &apiv1.Session{
-		Id: uuid.NewString(), Creator: "alice",
-
-		Agent: &apiv1.ResourceReference{Namespace: "team-a", Name: "assistant"},
+		Id: uuid.NewString(), Creator: "alice", Source: &apiv1.Session_Agent{Agent: &apiv1.AgentProvenance{Ref: &apiv1.ResourceReference{Namespace: "team-a", Name: "assistant"}}},
 	}, uuid.NewString())
 	require.NoError(t, err)
 	operation, err := store.BeginSessionOperation(t.Context(), session.Id, apiv1.RuntimeOperation_RUNTIME_OPERATION_CREATE)

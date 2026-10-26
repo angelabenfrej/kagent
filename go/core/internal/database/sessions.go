@@ -11,6 +11,7 @@ import (
 	"google.golang.org/protobuf/proto"
 	"google.golang.org/protobuf/types/known/timestamppb"
 
+	"github.com/kagent-dev/kagent/go/api/definition"
 	apiv1 "github.com/kagent-dev/kagent/go/api/gen/kagent/api/v1"
 )
 
@@ -49,7 +50,7 @@ func marshalSession(session *apiv1.Session) ([]byte, error) {
 
 // sameSessionRequest reports whether two creation requests target the same Agent. Names and other mutable fields do not affect retry identity.
 func sameSessionRequest(session, request *apiv1.Session) bool {
-	return proto.Equal(session.GetAgent(), request.GetAgent())
+	return proto.Equal(session.GetAgent().GetRef(), request.GetAgent().GetRef())
 }
 
 // CreateSession atomically reserves a session, its conversation history, and the
@@ -76,7 +77,7 @@ func (c *Client) CreateSession(ctx context.Context, request *apiv1.Session, requ
 
 	var row sessionRow
 	err = c.withTx(ctx, func(tx pgx.Tx) error {
-		row, err = insertSession(ctx, tx, request, requestID)
+		row, err = insertSession(ctx, tx, request, requestID, "")
 		return err
 	})
 	if errors.Is(err, pgx.ErrNoRows) {
@@ -105,32 +106,73 @@ func (c *Client) CreateSession(ctx context.Context, request *apiv1.Session, requ
 // a transaction so the history and session commit together. A missing prepared target
 // returns ErrNotFound; a duplicate creator/requestID returns pgx.ErrNoRows for the caller
 // to resolve.
-func insertSession(ctx context.Context, db pgx.Tx, request *apiv1.Session, requestID string) (sessionRow, error) {
+func insertSession(ctx context.Context, db pgx.Tx, request *apiv1.Session, requestID, agentUID string) (sessionRow, error) {
 	type preparedRevision struct {
 		Revision string
-		DBTime   time.Time
 	}
 	revision, err := queryOne(ctx, db, `
-		SELECT p.latest_successful_revision AS revision, clock_timestamp() AS db_time
+		SELECT p.latest_successful_revision AS revision
 		FROM agent_definition p
 		WHERE p.namespace = $1 AND p.agent_name = $2 AND p.retired_at IS NULL
-		    AND p.latest_successful_revision IS NOT NULL
-	`, pgx.RowToStructByName[preparedRevision], request.GetAgent().GetNamespace(), request.GetAgent().GetName())
+		    AND p.source_kind = 'Agent' AND p.latest_successful_revision IS NOT NULL AND ($3::text = '' OR p.agent_uid = $3)
+	`, pgx.RowToStructByName[preparedRevision], request.GetAgent().GetRef().GetNamespace(), request.GetAgent().GetRef().GetName(), agentUID)
 	if err != nil {
 		return sessionRow{}, fmt.Errorf("get latest prepared runtime revision: %w", notFoundOr(err))
 	}
-	if _, err := getAvailableRuntimeRevisionForUpdate(ctx, db, revision.Revision); err != nil {
+	return insertPinnedSession(ctx, db, request, requestID, revision.Revision)
+}
+
+// insertPinnedSession reserves the conversation and its revision reference in
+// one transaction. Source deletion cannot change these accepted inputs.
+func insertPinnedSession(ctx context.Context, db pgx.Tx, request *apiv1.Session, requestID, revisionID string) (sessionRow, error) {
+	pinned, err := getAvailableRuntimeRevisionForUpdate(ctx, db, revisionID)
+	if err != nil {
+		return sessionRow{}, err
+	}
+	source := definition.Source{Kind: pinned.SourceKind, Namespace: pinned.Namespace, Name: pinned.AgentName, UID: pinned.AgentUID}
+	requested := definition.FromSession(request)
+	if requested.Kind != source.Kind || requested.Namespace != source.Namespace || requested.Name != source.Name || (requested.UID != "" && requested.UID != source.UID) {
+		return sessionRow{}, fmt.Errorf("revision does not belong to the requested source: %w", ErrConflict)
+	}
+	now, err := queryOne(ctx, db, `SELECT statement_timestamp()::timestamptz`, pgx.RowTo[time.Time])
+	if err != nil {
 		return sessionRow{}, err
 	}
 	session := proto.CloneOf(request)
-	historyID := uuid.New()
+	setSessionSource(session, source)
 	session.ContextId = session.Id
-	session.PreparedRevision = revision.Revision
+	session.PreparedRevision = revisionID
 	session.State = apiv1.RuntimeState_RUNTIME_STATE_CREATING
 	session.Operation = apiv1.RuntimeOperation_RUNTIME_OPERATION_CREATE
-	session.CreatedAt = timestamppb.New(revision.DBTime)
-	session.UpdatedAt = timestamppb.New(revision.DBTime)
-	return insertSessionRecords(ctx, db, session, requestID, historyID, nil)
+	session.CreatedAt = timestamppb.New(now)
+	session.UpdatedAt = timestamppb.New(now)
+	return insertSessionRecords(ctx, db, session, requestID, uuid.New(), nil)
+}
+
+// setSessionSource records the source captured by a pinned revision. Only actual
+// scheduled executions carry an execution ID; user checkpoint forks do not.
+func setSessionSource(session *apiv1.Session, source definition.Source) {
+	if source.Kind == definition.ScheduledRun {
+		provenance := session.GetScheduledRun()
+		if provenance == nil {
+			provenance = &apiv1.ScheduledRunProvenance{}
+		}
+		if provenance.Ref == nil {
+			provenance.Ref = &apiv1.ResourceReference{}
+		}
+		provenance.Ref.Namespace, provenance.Ref.Name, provenance.Uid = source.Namespace, source.Name, source.UID
+		session.Source = &apiv1.Session_ScheduledRun{ScheduledRun: provenance}
+	} else {
+		provenance := session.GetAgent()
+		if provenance == nil {
+			provenance = &apiv1.AgentProvenance{}
+		}
+		if provenance.Ref == nil {
+			provenance.Ref = &apiv1.ResourceReference{}
+		}
+		provenance.Ref.Namespace, provenance.Ref.Name, provenance.Uid = source.Namespace, source.Name, source.UID
+		session.Source = &apiv1.Session_Agent{Agent: provenance}
+	}
 }
 
 // GetSessionByID returns a session without filtering by owner, or ErrNotFound if
@@ -186,7 +228,7 @@ func (c *Client) ListSessions(ctx context.Context, query SessionQuery) ([]*apiv1
 		LEFT JOIN agent_runtime_revision r ON r.revision = i.prepared_revision
 		WHERE i.state <> 'RUNTIME_STATE_DELETED' AND ($1::boolean OR i.user_id = $2)
 		  AND (NULLIF($3::text, '') IS NULL OR i.id > NULLIF($3::text, '')::uuid)
-		  AND ($4::text = '' OR (r.agent_name = $4 AND r.namespace = $5))
+		  AND ($4::text = '' OR (r.agent_name = $4 AND r.namespace = $5 AND r.source_kind = 'Agent'))
 		ORDER BY i.id
 		LIMIT $6
 	`,

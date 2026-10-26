@@ -6,7 +6,6 @@ import { Pencil } from "lucide-react";
 import { useTheme } from "@emotion/react";
 import { AgentRail } from "@/components/agent/AgentRail";
 import { AgentStatusTag } from "@/components/agent/AgentStatusTag";
-import { AgentSchedules } from "@/components/agent/AgentSchedules";
 import { AgentContextPanel } from "@/components/chat/AgentContextPanel";
 import { PageFrame } from "@/components/Structure/PageFrame";
 import { buildPath, paths } from "@/router/routes";
@@ -565,11 +564,6 @@ export function AgentPage() {
           }
         />
 
-        {/* Below the conversations, because a conversation is what a reader came here
-            for and a schedule is how some of them got started. */}
-        {namespace && name ? (
-          <AgentSchedules agent={{ namespace, name }} />
-        ) : null}
       </Space>
 
       {/*

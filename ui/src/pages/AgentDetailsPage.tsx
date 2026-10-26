@@ -16,8 +16,8 @@ import {
 } from "@/components/agent-instances/instanceLabels";
 import { paths } from "@/router/routes";
 import { AgentRail } from "@/components/agent/AgentRail";
-import { agentPageUrl } from "@/components/agent/agentUrl";
-import { bareName, isNotFound, useAgentInstance, useAgentInstances } from "@/api";
+import { instanceSourceUrl } from "@/components/agent/agentUrl";
+import { isNotFound, useAgentInstance, useAgentInstances } from "@/api";
 
 const { Paragraph, Text } = Typography;
 
@@ -65,13 +65,7 @@ export function AgentDetailsPage() {
    * as NULL — so there is genuinely no agent page to link to, and rendering a link
    * anyway would point at one that does not exist.
    */
-  const agentHref =
-    data?.agent
-      ? agentPageUrl({
-          namespace: data.agent.split("/")[0],
-          name: bareName(data.agent),
-        })
-      : undefined;
+  const agentHref = instanceSourceUrl(data);
 
   // A 404 is a different answer from a failed request: the controller told us this
   // instance does not exist — or that it is not ours, which the API reports the same
@@ -99,7 +93,7 @@ export function AgentDetailsPage() {
         },
         {
           key: "agent",
-          label: "Agent",
+          label: data.source?.kind === "ScheduledRun" ? "Scheduled run" : "Agent",
           // Full width, and not only because it is the most important field here:
           // antd warns when the spans in a line do not sum to `column`, and that
           // warning fails the browser suite. An odd number of single-span fields is

@@ -96,7 +96,15 @@ export interface AgentInstance {
   name: string;
   /** Who created it. Empty on a cluster with no authentication in front. */
   creator: string;
-  /** `namespace/name` of the Agent it was created from, when recorded. */
+  /** Kubernetes definition that supplied the pinned agent behavior. */
+  source?: {
+    kind: "Agent" | "ScheduledRun";
+    namespace: string;
+    name: string;
+    uid: string;
+    executionId?: string;
+  };
+  /** `namespace/name` of the definition supplying its agent behavior. */
   agent?: string;
   /** The runtime revision this instance was prepared against. */
   preparedRevision?: string;

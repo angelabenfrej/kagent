@@ -38,7 +38,11 @@ message Session {
   string creator = 2;
   reserved 3, 4;
   reserved "harness", "agent_template";
-  ResourceReference agent = 15;
+  // Output only. Definition source captured from this Session's pinned revision.
+  oneof source {
+    AgentProvenance agent = 15;
+    ScheduledRunProvenance scheduled_run = 16;
+  }
   string prepared_revision = 5;
   string a2a_authority = 6;
   RuntimeState state = 7;
@@ -54,6 +58,19 @@ message Session {
   // Output only. A2A conversation ID, equal to this session's ID.
   // Forks receive a new conversation ID and new task IDs.
   string context_id = 14;
+}
+
+message AgentProvenance {
+  ResourceReference ref = 1;
+  string uid = 2;
+}
+
+message ScheduledRunProvenance {
+  ResourceReference ref = 1;
+  string uid = 2;
+  // Present only when this Session was reserved for a scheduled execution.
+  // A checkpoint fork retains the definition source without execution ownership.
+  string execution_id = 3;
 }
 
 message CreateSessionRequest {

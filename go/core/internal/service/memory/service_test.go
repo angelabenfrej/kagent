@@ -148,7 +148,7 @@ func (store *memoryStore) GetSessionForRuntime(_ context.Context, id, _ string) 
 	if store.bindingErr != nil {
 		return nil, store.bindingErr
 	}
-	return &apiv1.Session{Id: id, Creator: "user", Agent: &apiv1.ResourceReference{Namespace: "team-a", Name: "agent"}, A2AAuthority: substrate.ActorHost("team-a", substrate.ActorName(id), "")}, nil
+	return &apiv1.Session{Id: id, Creator: "user", A2AAuthority: substrate.ActorHost("team-a", substrate.ActorName(id), ""), Source: &apiv1.Session_Agent{Agent: &apiv1.AgentProvenance{Ref: &apiv1.ResourceReference{Namespace: "team-a", Name: "agent"}}}}, nil
 }
 
 type testActorVerifier struct{}

@@ -14,6 +14,7 @@ import (
 	"k8s.io/apimachinery/pkg/util/validation"
 
 	apia2a "github.com/kagent-dev/kagent/go/api/a2a"
+	"github.com/kagent-dev/kagent/go/api/definition"
 	apiv1 "github.com/kagent-dev/kagent/go/api/gen/kagent/api/v1"
 	"github.com/kagent-dev/kagent/go/api/v1alpha3"
 	"github.com/kagent-dev/kagent/go/core/internal/database"
@@ -75,7 +76,8 @@ func (s *InteractionService) storedSession(ctx context.Context, verb auth.Verb, 
 	if err != nil {
 		return nil, interactionError(ctx, err)
 	}
-	if session.GetAgent().GetNamespace() != agent.Namespace || session.GetAgent().GetName() != agent.Name {
+	source := definition.FromSession(session)
+	if source.Namespace != agent.Namespace || source.Name != agent.Name {
 		return nil, a2atype.NewError(a2atype.ErrUnauthorized, "context does not belong to this Agent")
 	}
 	return session, nil

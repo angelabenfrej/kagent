@@ -105,7 +105,7 @@ export function AgentChatPage() {
    */
   const instances = useAgentInstances();
   const agent = instance.data?.agent;
-  const canAttach = useAgentTakesFiles(agent);
+  const canAttach = useAgentTakesFiles(agent, instance.data?.source?.kind);
   const contextId = instance.data?.contextId;
   const conversation = useMemo(
     () => (id && agent ? { id, agent, contextId } : undefined),

@@ -44,7 +44,7 @@ func (s *actorSessionStore) ListSessions(_ context.Context, query database.Sessi
 func TestMCPActorListsOnlyItsSession(t *testing.T) {
 	store := &actorSessionStore{fakeSessionStore: &fakeSessionStore{}}
 	for range 3 {
-		store.sessions = append(store.sessions, &apiv1.Session{Id: uuid.NewString(), Creator: "owner", Agent: &apiv1.ResourceReference{Namespace: "team-a", Name: "agent"}, State: apiv1.RuntimeState_RUNTIME_STATE_READY})
+		store.sessions = append(store.sessions, &apiv1.Session{Id: uuid.NewString(), Creator: "owner", State: apiv1.RuntimeState_RUNTIME_STATE_READY, Source: &apiv1.Session_Agent{Agent: &apiv1.AgentProvenance{Ref: &apiv1.ResourceReference{Namespace: "team-a", Name: "agent"}}}})
 	}
 	own := store.sessions[0]
 	own.A2AAuthority = substrate.ActorHost("team-a", substrate.ActorName(own.Id), "")

@@ -5,6 +5,7 @@ import { type AgentTemplate } from "../domain/agentTemplates";
 import type { Harness } from "../domain/harnesses";
 import { type ApiResource, useApiResource } from "./useApiResource";
 import { useAgent } from "./useAgents";
+import { invoke } from "../operations";
 
 /**
  * The harnesses in one namespace, or in every observed namespace.
@@ -20,9 +21,12 @@ export function useHarnesses(namespace?: string): ApiResource<Harness[]> {
 }
 
 /** Whether an Agent (`namespace/name`) takes files; undefined until known. Only the kagent harness does. */
-export function useAgentTakesFiles(ref?: string): boolean | undefined {
+export function useAgentTakesFiles(ref?: string, kind: "Agent" | "ScheduledRun" = "Agent"): boolean | undefined {
   const [namespace, name] = ref?.split("/") ?? [];
-  const spec = useAgent(namespace, name).data?.resource.spec;
+  const agent = useAgent(kind === "Agent" ? namespace : undefined, name);
+  const schedule = useApiResource(kind === "ScheduledRun" && namespace && name ? ["scheduledRuns.get", namespace, name] : null,
+    () => invoke("scheduledRuns.get", { ref: { namespace: namespace ?? "", name: name ?? "" } }));
+  const spec = kind === "ScheduledRun" ? schedule.data?.scheduledRun.spec.agent : agent.data?.resource.spec;
   const refName = spec?.harnessRef.name;
   const harnesses = useApiResource(refName ? ["harnesses.list", namespace] : null, () =>
     apiClient.agentBuildingBlocks.harnesses(namespace),

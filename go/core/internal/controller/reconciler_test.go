@@ -23,6 +23,7 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 
 	kagentfake "github.com/kagent-dev/kagent/go/api/clientset/versioned/fake"
+	"github.com/kagent-dev/kagent/go/api/definition"
 	apiv1 "github.com/kagent-dev/kagent/go/api/gen/kagent/api/v1"
 	kagentv1alpha3 "github.com/kagent-dev/kagent/go/api/v1alpha3"
 	"github.com/kagent-dev/kagent/go/core/internal/database"
@@ -44,7 +45,7 @@ func TestReconcilerPersistsPairInOrder(t *testing.T) {
 		t.Fatal(err)
 	}
 	state := AgentReconciliation{
-		Agent:  template,
+		Source: agentSource(template),
 		Target: &compiledTarget{Revision: *revision, RevisionID: revisionID, ActorTemplate: desiredActor},
 	}
 	reconciliations := krt.NewStaticCollection(nil, []AgentReconciliation{state}, opts.WithName("Reconciliations")...)
@@ -179,15 +180,14 @@ func TestRuntimeRevisionGCCollectsRetiredRevisions(t *testing.T) {
 				GoldenTag: &ateapipb.ObjectRef{Atespace: "ate-golden", Name: "golden"},
 			}}
 			state := AgentReconciliation{
-				Agent:  &kagentv1alpha3.Agent{ObjectMeta: metav1.ObjectMeta{Namespace: "team-a", Name: "assistant", UID: "agent-uid"}},
+				Source: agentSource(&kagentv1alpha3.Agent{ObjectMeta: metav1.ObjectMeta{Namespace: "team-a", Name: "assistant", UID: "agent-uid"}}),
 				Target: &compiledTarget{Revision: *revision, RevisionID: id, ActorTemplate: desired},
 			}
 			states.UpdateObject(state)
 			require.NoError(t, reconciler.reconcileAgent(ctx, state.ResourceName()))
 
 			request := &apiv1.Session{
-				Id: uuid.NewString(), Creator: "alice",
-				Agent: &apiv1.ResourceReference{Namespace: "team-a", Name: "assistant"},
+				Id: uuid.NewString(), Creator: "alice", Source: &apiv1.Session_Agent{Agent: &apiv1.AgentProvenance{Ref: &apiv1.ResourceReference{Namespace: "team-a", Name: "assistant"}}},
 			}
 			session, _, err := store.CreateSession(ctx, request, "session")
 			require.NoError(t, err)
@@ -215,8 +215,7 @@ func TestRuntimeRevisionGCCollectsRetiredRevisions(t *testing.T) {
 
 			// An invalid replacement UID still revokes the old identity. Failed or
 			// ambiguous network deletion must leave the claim available to retry.
-			state.Agent = state.Agent.DeepCopy()
-			state.Agent.UID = "replacement-uid"
+			state.Source.UID = "replacement-uid"
 			states.UpdateObject(state)
 			deleteErr := errors.New("deletion interrupted")
 			gcStore := &failingFinalizationStore{Client: store}
@@ -357,8 +356,8 @@ func (s *fakeRuntimeRevisionStore) RecordRuntimeRevision(_ context.Context, revi
 	return nil
 }
 
-func (s *fakeRuntimeRevisionStore) RetireAgentIdentities(_ context.Context, namespace, template string) error {
-	s.retired = namespace + "/" + template
+func (s *fakeRuntimeRevisionStore) RetireAgentIdentities(_ context.Context, kind definition.Kind, namespace, template string) error {
+	s.retired = string(kind) + "/" + namespace + "/" + template
 	return nil
 }
 
@@ -469,8 +468,8 @@ func TestReconciliationQueueRetriesWithBackoff(t *testing.T) {
 	})
 }
 
-func (s *fakeRuntimeRevisionStore) GetAgentEgressGrant(_ context.Context, namespace, uid string) (egress.Access, error) {
-	if s.pair != nil && s.pair.Namespace == namespace && s.pair.AgentUID == uid && s.retired == "" {
+func (s *fakeRuntimeRevisionStore) GetAgentEgressGrant(_ context.Context, source definition.Source) (egress.Access, error) {
+	if s.pair != nil && s.pair.Source == source && s.retired == "" {
 		return s.pair.EgressGrant, nil
 	}
 	return egress.Access{}, nil

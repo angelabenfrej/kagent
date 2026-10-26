@@ -84,7 +84,7 @@ export function instanceFields(
   },
   {
     key: "agent",
-    label: "Agent",
+    label: data.source?.kind === "ScheduledRun" ? "Scheduled run" : "Agent",
     // Full width, and not only because it is the most important field here:
     // antd warns when the spans in a line do not sum to `column`, and that
     // warning fails the browser suite. An odd number of single-span fields is

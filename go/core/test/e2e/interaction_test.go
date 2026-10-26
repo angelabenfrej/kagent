@@ -571,7 +571,7 @@ func TestSharedAgentInteraction(t *testing.T) {
 			t.Fatalf("list Sessions: %v", err)
 		}
 		for _, session := range sessions.GetSessions() {
-			if session.GetAgent().GetName() == fixture.childTemplate {
+			if session.GetAgent().GetRef().GetName() == fixture.childTemplate {
 				t.Fatalf("Shared child created Session %q", session.GetId())
 			}
 		}
@@ -823,7 +823,7 @@ func newInteractionFixtureForHarnessTemplate(t *testing.T, target, harnessName, 
 	}
 	return &interactionFixture{
 		ctx:         ctx,
-		tenant:      session.GetAgent().GetNamespace() + "/" + session.GetAgent().GetName(),
+		tenant:      session.GetAgent().GetRef().GetNamespace() + "/" + session.GetAgent().GetRef().GetName(),
 		client:      a2apb.NewA2AServiceClient(conn),
 		sessions:    sessions,
 		checkpoints: apiv1.NewCheckpointServiceClient(conn),

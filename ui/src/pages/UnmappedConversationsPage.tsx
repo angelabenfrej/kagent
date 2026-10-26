@@ -46,6 +46,7 @@ export function UnmappedConversationsPage() {
     const known = new Set(agents.data.agents.map((agent) => agent.ref));
     const unreadable = new Set(agents.data.refused.map((entry) => entry.namespace));
     return (conversations.data ?? []).filter((instance) => {
+      if (instance.source?.kind === "ScheduledRun") return false;
       if (unreadable.has(instance.agent?.split("/")[0] ?? "")) return false;
       return !instance.agent || !known.has(instance.agent);
     });

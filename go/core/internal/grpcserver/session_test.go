@@ -35,12 +35,22 @@ func (s *sessionAuthorizationStore) GetSession(_ context.Context, id, owner stri
 	return nil, database.ErrNotFound
 }
 
+func (s *sessionAuthorizationStore) GetSessionByID(_ context.Context, id string) (*apiv1.Session, error) {
+	s.reads.Add(1)
+	for _, session := range s.sessions {
+		if session.Id == id {
+			return session, nil
+		}
+	}
+	return nil, database.ErrNotFound
+}
+
 func (s *sessionAuthorizationStore) UpdateSessionName(ctx context.Context, id, owner, name string) (*apiv1.Session, error) {
 	session, err := s.GetSession(ctx, id, owner)
 	if err != nil {
 		return nil, err
 	}
-	return &apiv1.Session{Id: session.Id, Creator: session.Creator, Agent: session.Agent, Name: name}, nil
+	return &apiv1.Session{Id: session.Id, Creator: session.Creator, Name: name, Source: &apiv1.Session_Agent{Agent: session.GetAgent()}}, nil
 }
 
 func (s *sessionAuthorizationStore) ListSessions(_ context.Context, query database.SessionQuery) ([]*apiv1.Session, error) {
@@ -50,7 +60,7 @@ func (s *sessionAuthorizationStore) ListSessions(_ context.Context, query databa
 		if session.Id <= query.AfterID || (!query.AllUsers && session.Creator != query.UserID) {
 			continue
 		}
-		if query.Agent != nil && (session.Agent.Namespace != query.Agent.Namespace || session.Agent.Name != query.Agent.Name) {
+		if query.Agent != nil && (session.GetAgent().Ref.Namespace != query.Agent.Namespace || session.GetAgent().Ref.Name != query.Agent.Name) {
 			continue
 		}
 		rows = append(rows, session)
@@ -88,10 +98,7 @@ func TestSessionPermissionsAndOwnershipThroughGeneratedClient(t *testing.T) {
 	aliceID := "11111111-1111-4111-8111-111111111111"
 	bobID := "22222222-2222-4222-8222-222222222222"
 	agent := &apiv1.ResourceReference{Namespace: "team-a", Name: "assistant"}
-	store := &sessionAuthorizationStore{sessions: []*apiv1.Session{
-		{Id: aliceID, Creator: "alice", Agent: agent},
-		{Id: bobID, Creator: "bob", Agent: agent},
-	}}
+	store := &sessionAuthorizationStore{sessions: []*apiv1.Session{{Id: aliceID, Creator: "alice", Source: &apiv1.Session_Agent{Agent: &apiv1.AgentProvenance{Ref: agent}}}, {Id: bobID, Creator: "bob", Source: &apiv1.Session_Agent{Agent: &apiv1.AgentProvenance{Ref: agent}}}}}
 	connection := newConfigurationConnection(t, nil, func(config *Config) {
 		config.SessionService = sessionsvc.NewService(store, sessionAuthorizationPolicy{}, nil)
 		config.ShareStore = &testShareStore{sessionShare: &apiv1.SessionShare{SessionId: aliceID}, ownerUserID: "alice"}

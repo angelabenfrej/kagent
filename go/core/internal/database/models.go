@@ -7,6 +7,7 @@ import (
 	a2apb "github.com/a2aproject/a2a-go/v2/a2apb/v1"
 	"github.com/pgvector/pgvector-go"
 
+	"github.com/kagent-dev/kagent/go/api/definition"
 	apiv1 "github.com/kagent-dev/kagent/go/api/gen/kagent/api/v1"
 	"github.com/kagent-dev/kagent/go/core/internal/egress"
 	"github.com/kagent-dev/kagent/go/core/pkg/egresspolicy"
@@ -50,21 +51,17 @@ type AgentMemorySearchResult struct {
 	Score float64 `json:"score"`
 }
 
-// AgentDefinition tracks the desired and last successful runtime for an Agent UID.
+// AgentDefinition tracks the desired and last successful runtime for an AgentSpec source.
 type AgentDefinition struct {
-	Namespace   string
-	AgentName   string
-	AgentUID    string
+	definition.Source
 	EgressGrant egress.Access
 	// DesiredRevision is a compiled runtime digest, or empty while inputs are unresolved.
 	DesiredRevision string
 }
 
 type RuntimeRevision struct {
-	Revision                string
-	Namespace               string
-	AgentName               string
-	AgentUID                string
+	Revision string
+	definition.Source
 	SourceSnapshot          json.RawMessage
 	AgentCard               *a2apb.AgentCard
 	Credentials             []egress.Credential
